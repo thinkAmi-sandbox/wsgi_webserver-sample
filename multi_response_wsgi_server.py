@@ -2,6 +2,7 @@ import socket
 import io
 import sys
 import threading
+from urllib.parse import urlparse
 
 class MyWSGIHandler(object):
     def __init__(self, client_connection, client_address, application, server_name, server_port):
@@ -28,6 +29,13 @@ class MyWSGIHandler(object):
         str_request_line_without_crlf = str_request_line.rstrip('\r\n')
         request_method, path, request_version = str_request_line_without_crlf.split()
 
+        fullpath = "http://{server}:{port}{path}".format(
+            server=self.server_name,
+            port=str(self.server_port),
+            path=path,
+        )
+        parsed_fullpath = urlparse(fullpath)
+
         env = {}
         env['wsgi.version']      = (1, 0)
         env['wsgi.url_scheme']   = 'http'
@@ -38,6 +46,7 @@ class MyWSGIHandler(object):
         env['wsgi.run_once']     = True  # 複数回呼ばれそうなので、True
         env['REQUEST_METHOD']    = request_method        # GET
         env['PATH_INFO']         = path                  # /
+        env['QUERY_STRING']      = parsed_fullpath.query # query parameter
         env['SERVER_NAME']       = self.server_name      # FQDN
         env['SERVER_PORT']       = str(self.server_port) # 8888
 
