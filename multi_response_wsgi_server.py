@@ -105,7 +105,7 @@ class MyWSGIServer(object):
         self.listen_socket.bind((ip_address, port))
         self.listen_socket.listen(1)
         self.application = wsgi_app
-        self.server_name = socket.getfqdn(ip_address)
+        self.server_name = socket.gethostname()
         self.server_port = port
     
     def serve_forever(self):
