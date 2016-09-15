@@ -3,6 +3,9 @@ import io
 import sys
 import threading
 from urllib.parse import urlparse
+from http.cookies import SimpleCookie
+
+HTTP_HEADER_COOKIE = 'Cookie:'
 
 class MyWSGIHandler(object):
     def __init__(self, client_connection, client_address, application, server_name, server_port):
@@ -24,17 +27,37 @@ class MyWSGIHandler(object):
 
 
     def get_environ(self, byte_request):
-        byte_request_line = byte_request.splitlines()[0]
+        byte_request_lines = byte_request.splitlines()
+
+        # リクエストメソッドやパスの設定用
+        byte_request_line = byte_request_lines[0]
         str_request_line = byte_request_line.decode('utf-8')
         str_request_line_without_crlf = str_request_line.rstrip('\r\n')
         request_method, path, request_version = str_request_line_without_crlf.split()
 
+        # クエリストリング設定用
         fullpath = "http://{server}:{port}{path}".format(
             server=self.server_name,
             port=str(self.server_port),
             path=path,
         )
         parsed_fullpath = urlparse(fullpath)
+
+        # クッキー設定用
+        # クライアントからのリクエストラインに、"Cookie:"始まりのものをクッキーとみなす
+        # http://qiita.com/mogulla3/items/189c99c87a0fc827520e
+        byte_request_lines = byte_request.splitlines()
+
+        # クッキーを含むリクエストラインは
+        # ----------------------------
+        # b'GET / HTTP/1.1'
+        # ...
+        # b'Cookie: visit=1'
+        # ----------------------------
+        # となる
+        # env['HTTP_COOKIE']に設定する値は、'visit=1'のような文字列とする必要があるため、
+        # リクエストラインに含まれる不要な"Cookie: "を削除したものを設定する
+        request_cookies = [line.decode('utf-8').replace(HTTP_HEADER_COOKIE, '').lstrip() for line in byte_request_lines if line.decode('utf-8').find(HTTP_HEADER_COOKIE) == 0]
 
         env = {}
         env['wsgi.version']      = (1, 0)
@@ -49,6 +72,13 @@ class MyWSGIHandler(object):
         env['QUERY_STRING']      = parsed_fullpath.query # query parameter
         env['SERVER_NAME']       = self.server_name      # FQDN
         env['SERVER_PORT']       = str(self.server_port) # 8888
+
+        # "HTTP_"でリクエストヘッダを渡せる
+        # https://knzm.readthedocs.io/en/latest/pep-3333-ja.html#environ-variables
+        if request_cookies:
+            # このWebサーバの場合、クッキーをリストで渡す
+            # (複数のクッキーヘッダがあると仮定)
+            env['HTTP_COOKIE']   = request_cookies
 
         return env
 
